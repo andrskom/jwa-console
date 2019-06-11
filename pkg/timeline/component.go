@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	jira "github.com/andygrunwald/go-jira"
+	"github.com/andygrunwald/go-jira"
 	"github.com/pkg/errors"
 
 	"github.com/andrskom/jwa-console/pkg/jiraf"
@@ -38,7 +38,26 @@ func (c *Component) GetJiraFactory() *jiraf.Factory {
 	return c.jiraFactory
 }
 
-func (c *Component) Start(taskID string) (*Model, error) {
+type StartOpts struct {
+	UsePrevDescription bool
+	Description        string
+}
+
+func (o *StartOpts) Validate() error {
+	if o == nil {
+		return nil
+	}
+	if o.UsePrevDescription && len(o.Description) > 0 {
+		return errors.New("u must use either -m or -pd ")
+	}
+
+	return nil
+}
+
+func (c *Component) Start(taskID string, opts *StartOpts) (*Model, error) {
+	if err := opts.Validate(); err != nil {
+		return nil, err
+	}
 	timeline, err := c.getTimeline()
 	if err != nil {
 		return nil, err
@@ -71,6 +90,26 @@ func (c *Component) Start(taskID string) (*Model, error) {
 	// }
 
 	newModel := NewModel(issue)
+	if opts != nil {
+		if opts.UsePrevDescription {
+			set := false
+			for i := len(timeline.List) - 1; i >= 0; i-- {
+				if timeline.List[i].Issue.Key == newModel.Issue.Key {
+					newModel.Description = timeline.List[i].Description
+					set = true
+					break
+				}
+			}
+			if !set {
+				return nil, errors.New(
+					"can't use description as prev the same task, because it does not found",
+				)
+			}
+		}
+		if len(opts.Description) > 0 {
+			newModel.Description = opts.Description
+		}
+	}
 	timeline.Add(newModel)
 
 	if err := c.saveTimeline(timeline); err != nil {
@@ -135,6 +174,7 @@ func (c *Component) Publish() error {
 			Updated:          &now,
 			Started:          (*jira.Time)(&model.StartTime),
 			TimeSpentSeconds: int(model.Duration().Seconds()),
+			Comment:          model.Description,
 		})
 		if err != nil {
 			return fmt.Errorf("unexpected response code while try to send worklog: %d", resp.StatusCode)
@@ -142,6 +182,41 @@ func (c *Component) Publish() error {
 	}
 
 	return c.saveTimeline(&Timeline{List: make([]*Model, 0)})
+}
+
+type EditOpts struct {
+	Description *string
+	StartTime   *time.Time
+	FinishTime  *time.Time
+}
+
+func (c *Component) Edit(num int, opts EditOpts) error {
+	tl, err := c.getTimeline()
+	if err != nil {
+		return err
+	}
+	if len(tl.List) <= num {
+		return errors.New("bad number of record")
+	}
+	if opts.Description != nil {
+		tl.List[num].Description = *opts.Description
+	}
+	if opts.StartTime != nil {
+		if num > 0 && opts.StartTime.Sub(tl.List[num-1].FinishTime) < 0 {
+			return errors.New("can't set start time before finish time previously record")
+		}
+		tl.List[num].StartTime = *opts.StartTime
+	}
+	if opts.FinishTime != nil {
+		if !tl.List[num].IsFinished() {
+			return errors.New("u can't edit finish time while task not stopped")
+		}
+		if num+1 != len(tl.List) && tl.List[num+1].StartTime.Sub(*opts.FinishTime) < 0 {
+			return errors.New("can't set finish time after start time next record")
+		}
+		tl.List[num].FinishTime = *opts.FinishTime
+	}
+	return c.saveTimeline(tl)
 }
 
 func (c *Component) getTimeline() (*Timeline, error) {

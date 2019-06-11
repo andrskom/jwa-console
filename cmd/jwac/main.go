@@ -23,6 +23,9 @@ import (
 func main() {
 	app := cli.NewApp()
 	app.EnableBashCompletion = true
+	app.Version = "v0.0.1-alpha"
+	app.Name = "jwac"
+	app.Usage = "Jira worklog assistant console"
 	dbFilePath, err := getDotRc()
 	if err != nil {
 		log.Fatalf("Can't get db path: %s", err.Error())
@@ -32,6 +35,17 @@ func main() {
 	jiraFactory := jiraf.NewFactory(credsComponent)
 
 	timelineComponent := timeline.NewComponent(db, jiraFactory)
+
+	startFlags := []cli.Flag{
+		cli.StringFlag{
+			Name:  "m",
+			Usage: "One line description",
+		},
+		cli.BoolFlag{
+			Name:  "pd",
+			Usage: "Use prev descr for this task",
+		},
+	}
 
 	app.Commands = []cli.Command{
 		{
@@ -55,6 +69,7 @@ func main() {
 		{
 			Name:   "start",
 			Usage:  "Start track task",
+			Flags:  startFlags,
 			Action: action.Start(timelineComponent),
 		},
 		{
@@ -64,6 +79,7 @@ func main() {
 		},
 		{
 			Name:  "start-and-wait",
+			Flags: startFlags,
 			Usage: "Start task and stop tracking when u send SIGTERM",
 			Action: func(c *cli.Context) (err error) {
 				started := false
@@ -102,6 +118,43 @@ func main() {
 			Usage:  "Completion for terminal",
 			Action: action.Completion(),
 		},
+		{
+			Name:   "edit",
+			Usage:  "Edit params of work record",
+			Flags: []cli.Flag{
+				cli.BoolFlag{
+					Name:  "mremove",
+					Usage: "Remove description",
+				},
+				cli.StringFlag{
+					Name:  "m",
+					Usage: "One line description",
+				},
+				cli.StringFlag{
+					Name:  "start-time",
+					Usage: "Start time in format '2006-01-02T15:04'",
+				},
+				cli.StringFlag{
+					Name:  "finish-time",
+					Usage: "Finish time in format '2006-01-02T15:04'",
+				},
+			},
+			Action: action.Edit(timelineComponent),
+		},
+		// {
+		// 	Name:   "test",
+		// 	Flags: []cli.Flag{
+		// 		cli.StringFlag{
+		// 			Name:  "m",
+		// 			Usage: "One line description",
+		// 		},
+		// 		cli.BoolFlag{
+		// 			Name:  "pd",
+		// 			Usage: "Use prev descr for this task",
+		// 		},
+		// 	},
+		// 	Action: action.Test(),
+		// },
 	}
 
 	sort.Sort(cli.FlagsByName(app.Flags))

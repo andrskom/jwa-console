@@ -17,7 +17,22 @@ func Start(
 		if taskID == "" {
 			return errors.New("u must set number of task as last args")
 		}
-		model, err := timelineComponent.Start(taskID)
+
+		var opts *timeline.StartOpts
+		if len(c.String("m")) > 0 {
+			if opts == nil {
+				opts = new(timeline.StartOpts)
+			}
+			opts.Description = c.String("m")
+		}
+		if c.Bool("pd") {
+			if opts == nil {
+				opts = new(timeline.StartOpts)
+			}
+			opts.UsePrevDescription = true
+		}
+
+		model, err := timelineComponent.Start(taskID, opts)
 		if err != nil {
 			return err
 		}

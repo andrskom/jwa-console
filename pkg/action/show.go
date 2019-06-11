@@ -12,6 +12,7 @@ import (
 
 var doNothingColor = color.New(color.FgBlack, 1)
 var activityColor = color.New(color.FgGreen)
+var errColor = color.New(color.FgRed)
 var warnColor = color.New(color.FgYellow)
 
 func Show(
@@ -40,9 +41,12 @@ func Show(
 			prevTask = task
 
 		}
-		activityColor.Printf(`
-Sum of activity: %s
-`, allDuration.String())
+
+		fmt.Printf(
+			"\n%s %s\n",
+			activityColor.Sprint("Sum of activity:"),
+			getDuration(allDuration, activityColor),
+		)
 
 		return nil
 	}
@@ -51,7 +55,8 @@ Sum of activity: %s
 func drawModel(model *timeline.Model) string {
 	res := activityColor.Sprintf(`%s Start %s %s
 `, model.StartTime.Format(time.RFC822), model.Issue.Key, model.Issue.Fields.Summary)
-	res += activityColor.Sprintln("   |")
+	res += activityColor.Sprintf(`   + %s
+`, model.Description)
 
 	var interval time.Duration
 	if model.IsFinished() {
@@ -65,17 +70,17 @@ func drawModel(model *timeline.Model) string {
 	}
 
 	if model.IsFinished() {
-		res += activityColor.Sprintf(`   %s Duration: %s
-`, model.FinishTime.Format(time.RFC822), model.Duration().String())
+		res += activityColor.Sprintf(`   %s Duration: `, model.FinishTime.Format(time.RFC822))
+		res += getDuration(model.Duration(), activityColor) + "\n"
 		return res
 	}
-	res += activityColor.Sprintf(`   Activity %s
-`, time.Now().Sub(model.StartTime).String())
+	res += activityColor.Sprint(`   Activity `)
+	res += getDuration(time.Now().Sub(model.StartTime), activityColor) + "\n"
 	return res
 }
 
 func drawRest(model *timeline.Model, prevModel *timeline.Model) string {
-	res := doNothingColor.Sprintf(`%s Do nothing
+	res := doNothingColor.Sprintf(`   %s Do nothing
 `, prevModel.FinishTime.Format(time.RFC822))
 	dur := model.StartTime.Sub(prevModel.FinishTime)
 	interval := dur / (time.Hour / 2)
@@ -83,7 +88,15 @@ func drawRest(model *timeline.Model, prevModel *timeline.Model) string {
 		interval--
 		res += doNothingColor.Sprintln("   |")
 	}
-	res += doNothingColor.Sprintf(`%s Duration: %s
-`, model.StartTime.Format(time.RFC822), dur.String())
+	res += doNothingColor.Sprintf(`   %s Duration: `, model.StartTime.Format(time.RFC822))
+	res += getDuration(dur, doNothingColor) + "\n"
 	return res
+}
+
+func getDuration(duration time.Duration, defaultColor *color.Color) string {
+	durationString := defaultColor.Sprint(duration.String())
+	if duration < 0 {
+		durationString = errColor.Sprint(duration.String())
+	}
+	return durationString
 }
