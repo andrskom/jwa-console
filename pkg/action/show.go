@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/fatih/color"
+	"github.com/gosuri/uitable"
 	"github.com/urfave/cli"
 
 	"github.com/andrskom/jwa-console/pkg/timeline"
@@ -42,6 +43,13 @@ func Show(
 
 		}
 
+		table := uitable.New()
+		table.RightAlign(2)
+		for key, data := range model.GetDurationsByTasks() {
+			table.AddRow(key, data.Summary, data.Duration.String())
+		}
+		fmt.Println("\n" + table.String())
+
 		fmt.Printf(
 			"\n%s %s\n",
 			activityColor.Sprint("Sum of activity:"),
@@ -75,7 +83,7 @@ func drawModel(model *timeline.Model) string {
 		return res
 	}
 	res += activityColor.Sprint(`   Activity `)
-	res += getDuration(time.Now().Sub(model.StartTime), activityColor) + "\n"
+	res += getDuration(model.ActivityDuration(), activityColor) + "\n"
 	return res
 }
 
