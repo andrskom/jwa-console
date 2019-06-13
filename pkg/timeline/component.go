@@ -197,6 +197,7 @@ type EditOpts struct {
 	Description *string
 	StartTime   *time.Time
 	FinishTime  *time.Time
+	Task        *string
 }
 
 func (c *Component) Edit(num int, opts EditOpts) error {
@@ -224,6 +225,22 @@ func (c *Component) Edit(num int, opts EditOpts) error {
 			return errors.New("can't set finish time after start time next record")
 		}
 		tl.List[num].FinishTime = *opts.FinishTime
+	}
+	if opts.Task != nil {
+		client, err := c.jiraFactory.GetClient()
+		if err != nil {
+			return err
+		}
+		issue, resp, err := client.Issue.Get(*opts.Task, nil)
+		if err != nil {
+			return fmt.Errorf(
+				"unexpected response code while try to get jira issue: %s, respo code: %d",
+				*opts.Task,
+				resp.StatusCode,
+			)
+		}
+
+		tl.List[num].Issue = issue
 	}
 	return c.saveTimeline(tl)
 }

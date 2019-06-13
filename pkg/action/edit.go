@@ -49,6 +49,10 @@ func Edit(
 			}
 			opts.FinishTime = &ft
 		}
+		if len(c.String("task")) > 0 {
+			opts.Task = new(string)
+			*opts.Task = c.String("task")
+		}
 		return timelineComponent.Edit(num, opts)
 	}
 }

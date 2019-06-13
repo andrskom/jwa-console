@@ -138,6 +138,10 @@ func main() {
 					Name:  "finish-time",
 					Usage: "Finish time in format '2006-01-02T15:04'",
 				},
+				cli.StringFlag{
+					Name:  "task",
+					Usage: "Task key",
+				},
 			},
 			Action: action.Edit(timelineComponent),
 		},
