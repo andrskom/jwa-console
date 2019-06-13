@@ -39,7 +39,7 @@ jwac-tray &
 ```
 
 You can stop it with kill util)))
- 
+
 ## Help
 
 If u want to help me with your PR or Issue, i will be very happy.

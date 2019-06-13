@@ -166,19 +166,28 @@ func (c *Component) Publish() error {
 		return fmt.Errorf("unexpected response code while try to get user: %d", resp.StatusCode)
 	}
 
-	now := jira.Time(time.Now())
-	for _, model := range models.List {
+	now := jira.Time(time.Now().Round(time.Second).Add(time.Millisecond))
+	for i, model := range models.List {
+		startTime := model.StartTime.Round(time.Second).Add(time.Millisecond)
 		_, resp, err := jiraClient.Issue.AddWorklogRecord(model.Issue.Key, &jira.WorklogRecord{
 			Author:           user,
+			UpdateAuthor:     user,
 			Created:          &now,
 			Updated:          &now,
-			Started:          (*jira.Time)(&model.StartTime),
+			Started:          (*jira.Time)(&startTime),
 			TimeSpentSeconds: int(model.Duration().Seconds()),
+			IssueID:          model.Issue.ID,
 			Comment:          model.Description,
 		})
 		if err != nil {
-			return fmt.Errorf("unexpected response code while try to send worklog: %d", resp.StatusCode)
+			return fmt.Errorf(
+				"unexpected response code while try to send worklog #%d: %d, for issue: %s",
+				i,
+				resp.StatusCode,
+				model.Issue.Key,
+			)
 		}
+
 	}
 
 	return c.saveTimeline(&Timeline{List: make([]*Model, 0)})
