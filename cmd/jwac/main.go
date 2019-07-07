@@ -14,16 +14,18 @@ import (
 
 	"github.com/andrskom/jwa-console/pkg/action"
 	"github.com/andrskom/jwa-console/pkg/action/login"
+	"github.com/andrskom/jwa-console/pkg/config"
 	"github.com/andrskom/jwa-console/pkg/creds"
 	"github.com/andrskom/jwa-console/pkg/jiraf"
 	"github.com/andrskom/jwa-console/pkg/storage/file"
+	"github.com/andrskom/jwa-console/pkg/tag"
 	"github.com/andrskom/jwa-console/pkg/timeline"
 )
 
 func main() {
 	app := cli.NewApp()
 	app.EnableBashCompletion = true
-	app.Version = "v0.0.1-alpha"
+	app.Version = "v0.1.0"
 	app.Name = "jwac"
 	app.Usage = "Jira worklog assistant console"
 	dbFilePath, err := getDotRc()
@@ -33,8 +35,13 @@ func main() {
 	db := file.New(dbFilePath, "init")
 	credsComponent := creds.New(db)
 	jiraFactory := jiraf.NewFactory(credsComponent)
+	cfg := config.NewComponent(db)
+	if err := cfg.Init(); err != nil {
+		log.Fatalln(err)
+	}
+	tagComponent := tag.NewComponent(cfg)
 
-	timelineComponent := timeline.NewComponent(db, jiraFactory)
+	timelineComponent := timeline.NewComponent(db, jiraFactory, cfg)
 
 	startFlags := []cli.Flag{
 		cli.StringFlag{
@@ -44,6 +51,14 @@ func main() {
 		cli.BoolFlag{
 			Name:  "pd",
 			Usage: "Use prev descr for this task",
+		},
+		cli.StringFlag{
+			Name:  "t",
+			Usage: "Tag for description, use -nt if you don't want use tag now",
+		},
+		cli.BoolFlag{
+			Name:  "nt",
+			Usage: "No tags for description",
 		},
 	}
 
@@ -70,7 +85,7 @@ func main() {
 			Name:   "start",
 			Usage:  "Start track task",
 			Flags:  startFlags,
-			Action: action.Start(timelineComponent),
+			Action: action.Start(timelineComponent, tagComponent),
 		},
 		{
 			Name:   "stop",
@@ -86,7 +101,7 @@ func main() {
 				signalCh := make(chan os.Signal)
 				signal.Notify(signalCh, syscall.SIGINT, syscall.SIGTERM)
 
-				if err := action.Start(timelineComponent)(c); err != nil {
+				if err := action.Start(timelineComponent, tagComponent)(c); err != nil {
 					return err
 				}
 				started = true
@@ -99,9 +114,10 @@ func main() {
 			},
 		},
 		{
-			Name:   "show",
-			Usage:  "Show logged",
-			Action: action.Show(timelineComponent),
+			Name:    "show",
+			Aliases: []string{"log", "ps"},
+			Usage:   "Show logged",
+			Action:  action.Show(timelineComponent),
 		},
 		{
 			Name:   "status",
@@ -109,9 +125,10 @@ func main() {
 			Action: action.Status(timelineComponent),
 		},
 		{
-			Name:   "publish",
-			Usage:  "Status of current task",
-			Action: action.Publish(timelineComponent),
+			Name:    "publish",
+			Aliases: []string{"push"},
+			Usage:   "Status of current task",
+			Action:  action.Publish(timelineComponent),
 		},
 		{
 			Name:   "completion",
@@ -119,8 +136,8 @@ func main() {
 			Action: action.Completion(),
 		},
 		{
-			Name:   "edit",
-			Usage:  "Edit params of work record",
+			Name:  "edit",
+			Usage: "Edit params of work record",
 			Flags: []cli.Flag{
 				cli.BoolFlag{
 					Name:  "mremove",
@@ -144,6 +161,37 @@ func main() {
 				},
 			},
 			Action: action.Edit(timelineComponent),
+		},
+		{
+			Name:  "change",
+			Usage: "Change to next task, equal to stop and start",
+			Flags: startFlags,
+			Action: func(c *cli.Context) error {
+				if err := action.Stop(timelineComponent)(c); err != nil {
+					return err
+				}
+				if err := action.Start(timelineComponent, tagComponent)(c); err != nil {
+					return err
+				}
+				return nil
+			},
+		},
+		{
+			Name:  "config",
+			Usage: "Configuration",
+			Flags: []cli.Flag{
+				cli.BoolFlag{
+					Name:  "l",
+					Usage: "List of configs",
+				},
+				cli.StringFlag{
+					Name: "set",
+					Usage: `Set config value.
+Use ':' as separator for key and value.
+Use ',' as separator for slice of strings. `,
+				},
+			},
+			Action: action.Config(cfg),
 		},
 		// {
 		// 	Name:   "test",

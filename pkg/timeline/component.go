@@ -3,11 +3,14 @@ package timeline
 import (
 	"encoding/json"
 	"fmt"
+	"log"
+	"strings"
 	"time"
 
 	"github.com/andygrunwald/go-jira"
 	"github.com/pkg/errors"
 
+	"github.com/andrskom/jwa-console/pkg/config"
 	"github.com/andrskom/jwa-console/pkg/jiraf"
 	"github.com/andrskom/jwa-console/pkg/storage/file"
 )
@@ -20,10 +23,11 @@ type Component struct {
 	db          *file.DB
 	file        string
 	jiraFactory *jiraf.Factory
+	cfg         *config.Component
 }
 
-func NewComponent(db *file.DB, jiraFactory *jiraf.Factory) *Component {
-	return &Component{db: db, jiraFactory: jiraFactory, file: "timeline.json"}
+func NewComponent(db *file.DB, jiraFactory *jiraf.Factory, cfg *config.Component) *Component {
+	return &Component{db: db, jiraFactory: jiraFactory, file: "timeline.json", cfg: cfg}
 }
 
 func (c *Component) Init() error {
@@ -54,21 +58,14 @@ func (o *StartOpts) Validate() error {
 	return nil
 }
 
-func (c *Component) Start(taskID string, opts *StartOpts) (*Model, error) {
+func (c *Component) BuildModel(taskID string, opts *StartOpts) (*Model, error) {
 	if err := opts.Validate(); err != nil {
 		return nil, err
 	}
+
 	timeline, err := c.getTimeline()
 	if err != nil {
 		return nil, err
-	}
-
-	model, err := timeline.GetCurrent()
-	if err != nil && err != ErrTimelineEmpty {
-		return nil, err
-	}
-	if err != ErrTimelineEmpty && !model.IsFinished() {
-		return nil, errors.New("last task is not finished")
 	}
 
 	client, err := c.jiraFactory.GetClient()
@@ -80,14 +77,6 @@ func (c *Component) Start(taskID string, opts *StartOpts) (*Model, error) {
 	if err != nil {
 		return nil, fmt.Errorf("uexpected jira response, while try to get issue: %s", resp.Status)
 	}
-
-	// if issue.Fields.Status.Name != IssueStatuNameInProgress {
-	// 	return nil, fmt.Errorf(
-	// 		"status of task must be '%s' for start, actual is '%s'",
-	// 		IssueStatuNameInProgress,
-	// 		issue.Fields.Status.Name,
-	// 	)
-	// }
 
 	newModel := NewModel(issue)
 	if opts != nil {
@@ -110,8 +99,47 @@ func (c *Component) Start(taskID string, opts *StartOpts) (*Model, error) {
 			newModel.Description = opts.Description
 		}
 	}
-	timeline.Add(newModel)
 
+	return newModel, nil
+}
+
+func (c *Component) Start(newModel *Model) (*Model, error) {
+
+	timeline, err := c.getTimeline()
+	if err != nil {
+		return nil, err
+	}
+
+	model, err := timeline.GetCurrent()
+	if err != nil && err != ErrTimelineEmpty {
+		return nil, err
+	}
+	if err != ErrTimelineEmpty && !model.IsFinished() {
+		return nil, errors.New("last task is not finished")
+	}
+
+	cfg, err := c.cfg.GetCfg()
+	if err != nil {
+		return nil, err
+	}
+
+	if len(cfg.StatusesForStart) != 0 {
+		hasStatus := false
+		for _, st := range cfg.StatusesForStart {
+			if newModel.Issue.Fields.Status.Name == st {
+				hasStatus = true
+			}
+		}
+		if !hasStatus {
+			return nil, fmt.Errorf(
+				"status of task must be '%s' for start, actual is '%s'",
+				strings.Join(cfg.StatusesForStart, ","),
+				newModel.Issue.Fields.Status.Name,
+			)
+		}
+	}
+
+	timeline.Add(newModel)
 	if err := c.saveTimeline(timeline); err != nil {
 		return nil, err
 	}
@@ -167,8 +195,17 @@ func (c *Component) Publish() error {
 	}
 
 	now := jira.Time(time.Now().Round(time.Second).Add(time.Millisecond))
+	lastSentIndex := 0
 	for i, model := range models.List {
+		if model.Duration() <= time.Minute {
+			log.Printf("%d [%s] Not sent, because duration less than minute", i, model.Issue.Key)
+			continue
+		}
 		startTime := model.StartTime.Round(time.Second).Add(time.Millisecond)
+		comment := model.Description
+		if len(model.Tag) > 0 {
+			comment = "#" + model.Tag + " " + comment
+		}
 		_, resp, err := jiraClient.Issue.AddWorklogRecord(model.Issue.Key, &jira.WorklogRecord{
 			Author:           user,
 			UpdateAuthor:     user,
@@ -177,9 +214,13 @@ func (c *Component) Publish() error {
 			Started:          (*jira.Time)(&startTime),
 			TimeSpentSeconds: int(model.Duration().Seconds()),
 			IssueID:          model.Issue.ID,
-			Comment:          model.Description,
+			Comment:          comment,
 		})
 		if err != nil {
+			if saveErr := c.saveTimeline(&Timeline{List: models.List[lastSentIndex+1:]}); saveErr != nil {
+				log.Printf("Can't save not sent tasks to file, last sent %d", lastSentIndex)
+			}
+			log.Println(err.Error())
 			return fmt.Errorf(
 				"unexpected response code while try to send worklog #%d: %d, for issue: %s",
 				i,
@@ -187,7 +228,7 @@ func (c *Component) Publish() error {
 				model.Issue.Key,
 			)
 		}
-
+		lastSentIndex = i
 	}
 
 	return c.saveTimeline(&Timeline{List: make([]*Model, 0)})

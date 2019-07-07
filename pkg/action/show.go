@@ -61,8 +61,9 @@ func Show(
 }
 
 func drawModel(model *timeline.Model) string {
-	res := activityColor.Sprintf(`%s Start %s %s
-`, model.StartTime.Format(time.RFC822), model.Issue.Key, model.Issue.Fields.Summary)
+	res := activityColor.Sprintf(`%s Start [%s] <%s> 
+   %s
+`, model.StartTime.Format(time.RFC822), model.Issue.Key, model.Tag, model.Issue.Fields.Summary)
 	res += activityColor.Sprintf(`   + %s
 `, model.Description)
 

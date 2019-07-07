@@ -15,6 +15,7 @@ type Model struct {
 	FinishTime  time.Time
 	Description string
 	Issue       *jira.Issue
+	Tag         string
 }
 
 func NewModel(issue *jira.Issue) *Model {
