@@ -1,6 +1,12 @@
 GOOS ?= linux
 GOARCH ?= amd64
 
+PROJECT_DIR ?= $(shell pwd)
+
+modC:
+	@docker volume create golang-mod-cache
+.PHONY: modC
+
 install:
 	@echo "+$@"
 	@go install ./cmd/jwac/
@@ -28,3 +34,29 @@ build-jwac-tray:
 build-all: build-jwac-all-platform
 	@GOOS=darwin make build-jwac-tray
 .PHONY: build-jwac-tray
+
+lint: lint-check
+	@echo "+ $@"
+	golangci-lint run --enable-all --skip-dirs vendor,version,gen ./pkg/filedb
+.PHONY: lint
+
+lint-check:
+	@echo "+ $@"
+	@if [ "`golangci-lint --version`" != "golangci-lint has version 1.33.0 built from b90551c on 2020-11-23T06:55:18Z" ]; then \
+            echo "Not expected version of golangci-lint, expected 1.33.0"; \
+            exit 1; \
+        fi
+.PHONY: lint-check
+
+mockgen: mockgen-check
+	@echo "+ $@"
+	mockgen -source=pkg/filedb/json.go -destination=pkg/filedb/json_mock_test.go -package=filedb
+.PHONY: lint
+
+mockgen-check:
+	@echo "+ $@"
+	@if [ "`mockgen -version`" != "v1.4.4" ]; then \
+            echo "Not expected version of mokcgen, expected v1.4.4"; \
+            exit 1; \
+        fi
+.PHONY: mockgen-check

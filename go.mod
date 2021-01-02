@@ -1,6 +1,6 @@
 module github.com/andrskom/jwa-console
 
-go 1.12
+go 1.15
 
 require (
 	github.com/andygrunwald/go-jira v1.10.0
@@ -13,13 +13,14 @@ require (
 	github.com/getlantern/ops v0.0.0-20190325191751-d70cb0d6f85f // indirect
 	github.com/getlantern/systray v0.0.0-20190131073753-26d5b920200d
 	github.com/go-stack/stack v1.8.0 // indirect
+	github.com/golang/mock v1.4.4
 	github.com/gosuri/uitable v0.0.3
-	github.com/labstack/gommon v0.2.8 // indirect
 	github.com/mattn/go-colorable v0.1.2 // indirect
 	github.com/mattn/go-runewidth v0.0.4 // indirect
 	github.com/oxtoacart/bpool v0.0.0-20190530202638-03653db5a59c // indirect
 	github.com/pkg/errors v0.8.0
 	github.com/rjeczalik/notify v0.9.2
+	github.com/stretchr/testify v1.3.0
 	github.com/urfave/cli v1.20.0
 	golang.org/x/crypto v0.0.0-20190426145343-a29dc8fdc734
 )
